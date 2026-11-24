@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from openai import OpenAIError
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -25,6 +27,23 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home():
+    index_file = Path(__file__).parent / "static" / "index.html"
+
+    if not index_file.is_file():
+        return HTMLResponse(
+            content=(
+                "<h1>SupportPilot AI</h1>"
+                "<p>Frontend file is missing: app/static/index.html</p>"
+                "<p><a href='/docs'>Open the API documentation</a></p>"
+            ),
+            status_code=404,
+        )
+
+    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
 
 
 def get_ticket_or_404(ticket_id: int, db: Session) -> Ticket:

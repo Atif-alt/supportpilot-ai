@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SupportPilot AI</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 16px; background: #f5f7fb; color: #222; }
+    h1 { color: #1f3b73; margin-bottom: 4px; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; margin: 16px 0; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    input, textarea, select { width: 100%; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; }
+    button { background: #1f3b73; color: #fff; border: none; padding: 8px 14px; border-radius: 5px; cursor: pointer; margin-right: 6px; }
+    button:hover { background: #2c529c; }
+    .meta { font-size: 13px; color: #555; }
+    .reply { white-space: pre-wrap; background: #eef3ff; padding: 10px; border-radius: 5px; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>SupportPilot AI</h1>
+  <p>AI-assisted customer support tickets. <a href="/docs">API docs</a></p>
+
+  <div class="card">
+    <h3>Create a ticket</h3>
+    <input id="subject" placeholder="Subject (min 3 characters)">
+    <textarea id="message" rows="4" placeholder="Describe the issue (min 10 characters)"></textarea>
+    <button onclick="createTicket()">Submit ticket</button>
+    <p id="formMsg"></p>
+  </div>
+
+  <h3>Tickets</h3>
+  <div id="tickets"></div>
+
+  <script>
+    const API = "/api/v1/tickets";
+
+    function esc(text) {
+      const div = document.createElement("div");
+      div.textContent = text ?? "";
+      return div.innerHTML;
+    }
+
+    async function createTicket() {
+      const subject = document.getElementById("subject").value.trim();
+      const message = document.getElementById("message").value.trim();
+      const msg = document.getElementById("formMsg");
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, message })
+      });
+      if (res.ok) {
+        msg.className = "";
+        msg.textContent = "Ticket created.";
+        document.getElementById("subject").value = "";
+        document.getElementById("message").value = "";
+        loadTickets();
+      } else {
+        msg.className = "error";
+        msg.textContent = "Check the subject (3+ chars) and message (10+ chars).";
+      }
+    }
+
+    async function analyze(id) {
+      const res = await fetch(`${API}/${id}/analyze`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || "Analysis failed.");
+      }
+      loadTickets();
+    }
+
+    async function setStatus(id, status) {
+      await fetch(`${API}/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      loadTickets();
+    }
+
+    async function loadTickets() {
+      const res = await fetch(API);
+      const tickets = await res.json();
+      const box = document.getElementById("tickets");
+      if (!tickets.length) { box.innerHTML = "<p>No tickets yet.</p>"; return; }
+      box.innerHTML = tickets.map(t => `
+        <div class="card">
+          <strong>#${t.id} ${esc(t.subject)}</strong>
+          <p>${esc(t.message)}</p>
+          <p class="meta">
+            Status:
+            <select onchange="setStatus(${t.id}, this.value)" style="width:auto">
+              ${["open","pending","resolved"].map(s =>
+                `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+            </select>
+          </p>
+          ${t.category ? `
+            <p class="meta">Category: ${esc(t.category)} | Sentiment: ${esc(t.sentiment)} | Urgency: ${t.urgency}/5</p>
+            <p><strong>Summary:</strong> ${esc(t.summary)}</p>
+            <p><strong>Suggested reply (review before sending):</strong></p>
+            <div class="reply">${esc(t.suggested_response)}</div>
+          ` : ""}
+          <p><button onclick="analyze(${t.id})">Analyze with AI</button></p>
+        </div>`).join("");
+    }
+
+    loadTickets();
+  </script>
+</body>
+</html>
